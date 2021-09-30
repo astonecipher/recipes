@@ -55,6 +55,11 @@ func (handler *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 
 func (handler *AuthHandler) SignInHandler(c *gin.Context) {
 	var user models.User
+	if err := c.ShouldBindJSON(&user); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	h := sha256.New()
 
 	cur := handler.collection.FindOne(handler.ctx, bson.M{
@@ -62,19 +67,7 @@ func (handler *AuthHandler) SignInHandler(c *gin.Context) {
 		"password": string(h.Sum([]byte(user.Password))),
 	})
 	if cur.Err() != nil {
-		c.JSON(http.StatusUnauthorized,
-			gin.H{"error": "Invalid username or password"})
-		return
-	}
-	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest,
-			gin.H{"error": err.Error()})
-		return
-	}
-
-	if user.Username != "admin" || user.Password != "password" {
-		c.JSON(http.StatusUnauthorized,
-			gin.H{"error": "Invalide Username or Password"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 		return
 	}
 
@@ -89,14 +82,17 @@ func (handler *AuthHandler) SignInHandler(c *gin.Context) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError,
-			gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	jwtOutput := JWTOutput{
 		Token:   tokenString,
 		Expires: expirationTime,
+	}
+	if cur.Err() != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
 	}
 	c.JSON(http.StatusOK, jwtOutput)
 }
